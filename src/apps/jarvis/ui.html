@@ -1,0 +1,691 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#050912" />
+    <title>Jarvis</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: "Segoe UI", system-ui, sans-serif;
+        color: #e7f2ff;
+        background: #050912;
+        --cyan: #66e4ff;
+        --amber: #ffc46b;
+        --red: #ff7a8a;
+        --accent: var(--cyan);
+        --dim: #7f9bb0;
+      }
+      * { box-sizing: border-box; }
+
+      body {
+        min-width: 280px;
+        height: 100vh;
+        height: 100dvh;
+        margin: 0;
+        display: grid;
+        place-items: center;
+        overflow: hidden;
+        background:
+          radial-gradient(ellipse at 50% 42%, #0f2c40 0, transparent 42%),
+          radial-gradient(ellipse at 50% 110%, #0a1a2b 0, transparent 55%),
+          #050912;
+      }
+      body::before {
+        content: "";
+        position: fixed;
+        inset: 0;
+        background-image:
+          linear-gradient(rgb(102 228 255 / 4%) 1px, transparent 1px),
+          linear-gradient(90deg, rgb(102 228 255 / 4%) 1px, transparent 1px);
+        background-size: 44px 44px;
+        mask-image: radial-gradient(circle at 50% 45%, #000 0, transparent 70%);
+        -webkit-mask-image: radial-gradient(circle at 50% 45%, #000 0, transparent 70%);
+        pointer-events: none;
+      }
+
+      main {
+        position: relative;
+        width: min(92vw, 560px);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
+      }
+
+      .stage {
+        position: relative;
+        width: min(80vw, 400px);
+        aspect-ratio: 1;
+        display: grid;
+        place-items: center;
+      }
+      #ring {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+      }
+
+      #orb {
+        position: relative;
+        width: 56%;
+        aspect-ratio: 1;
+        padding: 0;
+        border: 0;
+        border-radius: 50%;
+        background: transparent;
+        cursor: pointer;
+        -webkit-tap-highlight-color: transparent;
+      }
+      #orb:focus-visible { outline: 2px solid var(--accent); outline-offset: 14px; }
+
+      .halo, .core { position: absolute; inset: 8%; border-radius: 50%; }
+      .halo {
+        border: 1px solid color-mix(in srgb, var(--accent) 50%, transparent);
+        box-shadow: 0 0 35px color-mix(in srgb, var(--accent) 16%, transparent),
+                    inset 0 0 30px color-mix(in srgb, var(--accent) 10%, transparent);
+        transform: scale(var(--halo-scale, 1));
+        transition: border-color .3s, box-shadow .3s, transform .07s linear;
+      }
+      .core {
+        inset: 22%;
+        background:
+          radial-gradient(circle at 38% 32%, #efffff 0 2%, #8af0ff 6%, transparent 20%),
+          radial-gradient(circle at 50% 45%, #1886a4 0, #0b425d 34%, #091a2b 67%, #06111f 80%);
+        box-shadow:
+          0 0 24px rgb(63 222 255 / 55%),
+          0 0 70px rgb(30 175 219 / 27%),
+          inset -12px -18px 34px rgb(0 0 0 / 55%),
+          inset 5px 8px 18px rgb(175 246 255 / 30%);
+        transform: scale(var(--core-scale, 1));
+        filter: brightness(var(--brightness, 1));
+        transition: box-shadow .35s, filter .35s, transform .07s linear;
+      }
+
+      #orb.listening .halo { animation: breathe 2.4s ease-in-out infinite; }
+      #orb.listening .core {
+        box-shadow: 0 0 34px rgb(63 222 255 / 75%), 0 0 100px rgb(30 175 219 / 43%),
+          inset -12px -18px 34px rgb(0 0 0 / 55%), inset 5px 8px 18px rgb(175 246 255 / 35%);
+      }
+      #orb.thinking .halo { animation: rotate 1.8s linear infinite; border-style: dashed; }
+      #orb.thinking .core { filter: hue-rotate(35deg) brightness(var(--brightness, 1)); }
+      #orb.speaking .halo { animation: breathe .8s ease-in-out infinite; border-color: #9af4ff; }
+      #orb.speaking .core {
+        box-shadow: 0 0 44px rgb(89 226 255 / 85%), 0 0 120px rgb(30 175 219 / 50%),
+          inset -12px -18px 34px rgb(0 0 0 / 50%), inset 5px 8px 18px rgb(205 250 255 / 45%);
+      }
+      #orb.paused .core { filter: saturate(.35) brightness(.65); }
+      #orb.error .core { filter: hue-rotate(135deg); }
+
+      body:has(#orb.thinking) { --accent: var(--amber); }
+      body:has(#orb.error) { --accent: var(--red); }
+
+      /* Anillos HUD giratorios */
+      :root { --spd: 1; }
+      body:has(#orb.listening) { --spd: .8; }
+      body:has(#orb.speaking) { --spd: .55; }
+      body:has(#orb.thinking) { --spd: .25; }
+      body:has(#orb.paused) { --spd: 4; }
+      #hud {
+        position: absolute;
+        inset: 9%;
+        width: 82%;
+        height: 82%;
+        pointer-events: none;
+        overflow: visible;
+      }
+      #hud circle {
+        fill: none;
+        stroke: var(--accent);
+        transform-box: fill-box;
+        transform-origin: center;
+        transition: stroke .3s;
+      }
+      .r1 { stroke-width: 1.2; stroke-dasharray: 70 18 10 18; opacity: .75; animation: rotate calc(14s * var(--spd)) linear infinite; }
+      .r2 { stroke-width: 2; stroke-dasharray: 2 5; opacity: .5; animation: rotate calc(22s * var(--spd)) linear infinite reverse; }
+      .r3 { stroke-width: 3; stroke-dasharray: 90 60 30 60; opacity: .8; animation: rotate calc(9s * var(--spd)) linear infinite; }
+      .r4 { stroke-width: .8; stroke-dasharray: 20 6; opacity: .45; animation: rotate calc(30s * var(--spd)) linear infinite reverse; }
+      /* Reflejo que gira sobre el núcleo */
+      .core::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        border-radius: 50%;
+        background: conic-gradient(from 0deg, transparent 0 55%, rgb(150 245 255 / 38%) 80%, transparent 100%);
+        mix-blend-mode: screen;
+        animation: rotate calc(3.2s * var(--spd)) linear infinite;
+      }
+
+      h1 {
+        margin: 6px 0 0;
+        color: #d7f8ff;
+        font-size: 15px;
+        font-weight: 500;
+        letter-spacing: .38em;
+        text-indent: .38em;
+      }
+
+      .pill {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        margin-top: 12px;
+        padding: 7px 16px;
+        border: 1px solid rgb(102 228 255 / 16%);
+        border-radius: 999px;
+        background: rgb(8 20 34 / 60%);
+        backdrop-filter: blur(8px);
+        color: #a9c3d4;
+        font-size: 13px;
+      }
+      .dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--accent);
+        box-shadow: 0 0 10px var(--accent);
+        transition: background .3s, box-shadow .3s;
+      }
+      body:has(#orb.paused) .dot { background: #4b6272; box-shadow: none; }
+
+      .talk {
+        width: 100%;
+        min-height: 112px;
+        margin-top: 22px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        text-align: center;
+      }
+      #heard {
+        min-height: 20px;
+        margin: 0;
+        color: var(--dim);
+        font-size: 14px;
+        font-style: italic;
+        overflow-wrap: anywhere;
+      }
+      #reply {
+        max-height: 22vh;
+        margin: 0;
+        overflow-y: auto;
+        color: #e7f2ff;
+        font-size: 16px;
+        line-height: 1.55;
+        overflow-wrap: anywhere;
+        scrollbar-width: thin;
+        scrollbar-color: #1d3a4d transparent;
+      }
+      #heard:empty, #reply:empty { display: none; }
+      #cancel-turn {
+        align-self: center;
+        padding: 8px 14px;
+        border: 1px solid rgba(255, 122, 138, .45);
+        border-radius: 999px;
+        background: rgba(255, 122, 138, .08);
+        color: #ffb1bc;
+        font: inherit;
+        cursor: pointer;
+      }
+      #cancel-turn[hidden] { display: none; }
+      .swap { animation: swap .35s ease-out; }
+
+      @keyframes swap { from { opacity: 0; } to { opacity: 1; } }
+      @keyframes breathe { 0%, 100% { opacity: .65; } 50% { opacity: 1; } }
+      @keyframes rotate { to { transform: rotate(360deg); } }
+      @media (max-height: 640px) { .talk { min-height: 70px; margin-top: 12px; } }
+      @media (prefers-reduced-motion: reduce) {
+        *, *::before, *::after { animation-duration: .01ms !important; }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="stage">
+        <canvas id="ring" aria-hidden="true"></canvas>
+        <svg id="hud" viewBox="0 0 200 200" aria-hidden="true">
+          <circle class="r1" cx="100" cy="100" r="96" />
+          <circle class="r2" cx="100" cy="100" r="88" />
+          <circle class="r3" cx="100" cy="100" r="80" />
+          <circle class="r4" cx="100" cy="100" r="72" />
+        </svg>
+        <button id="orb" class="paused" type="button" aria-label="Iniciar escucha">
+          <span class="halo" aria-hidden="true"></span>
+          <span class="core" aria-hidden="true"></span>
+        </button>
+      </div>
+      <h1>JARVIS</h1>
+      <div class="pill">
+        <span class="dot" aria-hidden="true"></span>
+        <span id="status" role="status" aria-live="polite">Iniciando micrófono...</span>
+      </div>
+      <section class="talk" aria-live="polite">
+        <p id="heard"></p>
+        <p id="reply"></p>
+        <button id="cancel-turn" type="button" hidden>Cancelar respuesta</button>
+      </section>
+    </main>
+    <script>
+      const orb = document.getElementById("orb");
+      const status = document.getElementById("status");
+      const heard = document.getElementById("heard");
+      const reply = document.getElementById("reply");
+      const cancelTurn = document.getElementById("cancel-turn");
+      const ring = document.getElementById("ring");
+      const ringCtx = ring.getContext("2d");
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      const audioPlayer = new Audio();
+      let audioContext;
+      let outputAnalyser;
+      try {
+        audioContext = new AudioContext();
+        outputAnalyser = audioContext.createAnalyser();
+        outputAnalyser.fftSize = 256;
+        outputAnalyser.smoothingTimeConstant = .82;
+        const outputSource = audioContext.createMediaElementSource(audioPlayer);
+        outputSource.connect(outputAnalyser);
+        outputAnalyser.connect(audioContext.destination);
+      } catch (error) {
+        console.warn("No se pudo iniciar el visualizador de audio:", error);
+      }
+      let recognition;
+      let paused = false;
+      let busy = false;
+      let activeRequestController;
+      let restartTimer;
+      let pendingAudioUrl = "";
+      let microphoneStream;
+      let microphoneSource;
+      let microphoneAnalyser;
+      let activeAnalyser;
+      let currentLevel = 0;
+      let currentState = "paused";
+      let phase = 0;
+      const waveform = new Uint8Array(256);
+      const spectrum = new Uint8Array(128);
+      const POINTS = 120;
+      const shape = new Float32Array(POINTS);
+      const spectrumShape = new Float32Array(POINTS);
+      const COLORS = { listening: "102,228,255", speaking: "154,244,255", thinking: "255,196,107", error: "255,122,138", paused: "90,120,140" };
+
+      function resizeRing() {
+        const size = ring.clientWidth;
+        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+        ring.width = ring.height = Math.round(size * dpr);
+        ringCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      }
+      window.addEventListener("resize", resizeRing);
+      resizeRing();
+
+      function drawRing() {
+        const size = ring.clientWidth;
+        const c = size / 2;
+        const base = size * 0.335;
+        const rgb = COLORS[currentState] || COLORS.paused;
+        ringCtx.clearRect(0, 0, size, size);
+        phase += currentState === "thinking" ? 0.035 : 0.006;
+
+        // Marcas fijas del dial
+        ringCtx.lineWidth = 1;
+        for (let i = 0; i < 72; i += 1) {
+          const a = (i / 72) * Math.PI * 2 + phase * 0.4;
+          const len = i % 6 === 0 ? 9 : 4;
+          const r0 = size * 0.485;
+          ringCtx.strokeStyle = `rgba(${rgb},${i % 6 === 0 ? 0.4 : 0.16})`;
+          ringCtx.beginPath();
+          ringCtx.moveTo(c + Math.cos(a) * r0, c + Math.sin(a) * r0);
+          ringCtx.lineTo(c + Math.cos(a) * (r0 - len), c + Math.sin(a) * (r0 - len));
+          ringCtx.stroke();
+        }
+
+        // Onda circular reactiva al audio
+        const live = activeAnalyser && (currentState === "listening" || currentState === "speaking");
+        if (live) {
+          activeAnalyser.getByteTimeDomainData(waveform);
+          activeAnalyser.getByteFrequencyData(spectrum);
+        }
+        for (let i = 0; i < POINTS; i += 1) {
+          const sample = live ? (waveform[Math.floor((i / POINTS) * waveform.length)] - 128) / 128 : 0;
+          const idle = Math.sin(i * 0.35 + phase * 6) * 0.012 + Math.sin(i * 0.11 - phase * 3) * 0.01;
+          const target = live ? sample * 0.55 : idle;
+          shape[i] += (target - shape[i]) * 0.3;
+
+          const bin = Math.min(spectrum.length - 1, Math.floor((i / POINTS) * spectrum.length * .72));
+          const amplitude = live ? spectrum[bin] / 255 : 0;
+          spectrumShape[i] += (amplitude - spectrumShape[i]) * (amplitude > spectrumShape[i] ? .42 : .16);
+        }
+
+        ringCtx.save();
+        ringCtx.lineCap = "round";
+        ringCtx.shadowColor = `rgba(${rgb},.8)`;
+        ringCtx.shadowBlur = live ? 8 : 0;
+        for (let i = 0; i < POINTS; i += 1) {
+          const angle = (i / POINTS) * Math.PI * 2 - Math.PI / 2;
+          const strength = spectrumShape[i];
+          const inner = size * .405;
+          const outer = inner + 3 + strength * size * .065;
+          ringCtx.strokeStyle = `rgba(${rgb},${currentState === "paused" ? .12 : .18 + strength * .78})`;
+          ringCtx.lineWidth = 1 + strength * 1.5;
+          ringCtx.beginPath();
+          ringCtx.moveTo(c + Math.cos(angle) * inner, c + Math.sin(angle) * inner);
+          ringCtx.lineTo(c + Math.cos(angle) * outer, c + Math.sin(angle) * outer);
+          ringCtx.stroke();
+        }
+        ringCtx.restore();
+
+        ringCtx.lineWidth = 1.6;
+        ringCtx.lineJoin = "round";
+        ringCtx.strokeStyle = `rgba(${rgb},${currentState === "paused" ? 0.35 : 0.9})`;
+        ringCtx.shadowColor = `rgba(${rgb},.7)`;
+        ringCtx.shadowBlur = currentState === "paused" ? 0 : 10;
+        ringCtx.beginPath();
+        for (let i = 0; i <= POINTS; i += 1) {
+          const k = i % POINTS;
+          const a = (i / POINTS) * Math.PI * 2 - Math.PI / 2;
+          const r = base * (1 + shape[k] * 0.55 + currentLevel * 0.06);
+          const x = c + Math.cos(a) * r;
+          const y = c + Math.sin(a) * r;
+          if (i === 0) ringCtx.moveTo(x, y); else ringCtx.lineTo(x, y);
+        }
+        ringCtx.closePath();
+        ringCtx.stroke();
+        ringCtx.shadowBlur = 0;
+      }
+
+      function animateOrb() {
+        let targetLevel = 0;
+        if (activeAnalyser) {
+          activeAnalyser.getByteTimeDomainData(waveform);
+          let sum = 0;
+          for (const sample of waveform) {
+            const amplitude = (sample - 128) / 128;
+            sum += amplitude * amplitude;
+          }
+          const rms = Math.sqrt(sum / waveform.length);
+          targetLevel = Math.min(1, Math.max(0, (rms - .014) * 9));
+        }
+        currentLevel += (targetLevel - currentLevel) * (targetLevel > currentLevel ? .42 : .16);
+        orb.style.setProperty("--core-scale", (1 + currentLevel * .2).toFixed(3));
+        orb.style.setProperty("--halo-scale", (1 + currentLevel * .28).toFixed(3));
+        orb.style.setProperty("--brightness", (1 + currentLevel * .55).toFixed(3));
+        drawRing();
+        requestAnimationFrame(animateOrb);
+      }
+      requestAnimationFrame(animateOrb);
+
+      function showText(el, text) {
+        el.textContent = text;
+        el.classList.remove("swap");
+        void el.offsetWidth;
+        el.classList.add("swap");
+      }
+
+      async function prepareMicrophoneVisualizer() {
+        if (!audioContext || !navigator.mediaDevices?.getUserMedia) return;
+        try {
+          if (!microphoneStream) {
+            microphoneStream = await navigator.mediaDevices.getUserMedia({
+              audio: { echoCancellation: true, noiseSuppression: true }
+            });
+            microphoneSource = audioContext.createMediaStreamSource(microphoneStream);
+            microphoneAnalyser = audioContext.createAnalyser();
+            microphoneAnalyser.fftSize = 256;
+            microphoneAnalyser.smoothingTimeConstant = .82;
+            microphoneSource.connect(microphoneAnalyser);
+          }
+          if (audioContext.state === "suspended") await audioContext.resume();
+        } catch (error) {
+          console.warn("No se pudo activar el visualizador del micrófono:", error);
+        }
+      }
+
+      function stopMicrophoneVisualizer() {
+        microphoneSource?.disconnect();
+        microphoneStream?.getTracks().forEach((track) => track.stop());
+        microphoneSource = undefined;
+        microphoneStream = undefined;
+        microphoneAnalyser = undefined;
+        activeAnalyser = undefined;
+      }
+
+      function setState(state, message) {
+        currentState = state;
+        orb.className = state;
+        activeAnalyser = state === "listening"
+          ? microphoneAnalyser
+          : state === "speaking"
+            ? outputAnalyser
+            : undefined;
+        const canStart = state === "paused" || state === "error";
+        orb.setAttribute("aria-label", canStart ? "Iniciar escucha" : "Pausar escucha");
+        status.textContent = message;
+      }
+
+      async function startListening() {
+        if (!recognition || paused || busy) return;
+        window.clearTimeout(restartTimer);
+        try {
+          await prepareMicrophoneVisualizer();
+          if (paused || busy) return;
+          recognition.start();
+          setState("thinking", "Activando micrófono...");
+        } catch (error) {
+          if (error instanceof DOMException && error.name === "InvalidStateError") return;
+          paused = true;
+          setState("error", "Pulsa la esfera para permitir el micrófono");
+        }
+      }
+
+      function stopListening() {
+        try {
+          recognition.stop();
+        } catch (error) {
+          if (!(error instanceof DOMException && error.name === "InvalidStateError")) throw error;
+        }
+      }
+
+      function playCurrentAudio(signal) {
+        return new Promise((resolve, reject) => {
+          const finish = (error) => {
+            audioPlayer.removeEventListener("ended", onEnded);
+            audioPlayer.removeEventListener("error", onError);
+            signal?.removeEventListener("abort", onAbort);
+            if (error) reject(error);
+            else resolve();
+          };
+          const onEnded = () => finish();
+          const onError = () => finish(new Error("No pude reproducir mi respuesta de voz. Verifica que Kokoro esté disponible."));
+          const onAbort = () => {
+            audioPlayer.pause();
+            finish(new DOMException("La respuesta fue cancelada.", "AbortError"));
+          };
+          audioPlayer.addEventListener("ended", onEnded);
+          audioPlayer.addEventListener("error", onError);
+          signal?.addEventListener("abort", onAbort, { once: true });
+          if (signal?.aborted) onAbort();
+          else audioPlayer.play().catch(finish);
+        });
+      }
+
+      async function playPendingAudio(signal) {
+        if (!pendingAudioUrl) return;
+        audioPlayer.src = pendingAudioUrl;
+        if (audioContext?.state === "suspended") await audioContext.resume();
+        setState("speaking", "Estoy hablando...");
+        await playCurrentAudio(signal);
+        if (pendingAudioUrl.startsWith("blob:")) URL.revokeObjectURL(pendingAudioUrl);
+        pendingAudioUrl = "";
+      }
+
+      async function readStream(response, onEvent) {
+        if (!response.body) throw new Error("El servidor no inició el flujo de respuesta.");
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffered = "";
+
+        while (true) {
+          const { value, done } = await reader.read();
+          buffered += decoder.decode(value, { stream: !done });
+          let newline = buffered.indexOf("\n");
+          while (newline >= 0) {
+            const line = buffered.slice(0, newline).trim();
+            buffered = buffered.slice(newline + 1);
+            if (line) onEvent(JSON.parse(line));
+            newline = buffered.indexOf("\n");
+          }
+          if (done) break;
+        }
+
+        if (buffered.trim()) onEvent(JSON.parse(buffered));
+      }
+
+      async function sendUtterance(text) {
+        const message = text.trim();
+        if (!message || busy) return;
+        busy = true;
+        activeRequestController = new AbortController();
+        cancelTurn.hidden = false;
+        showText(heard, "“" + message + "”");
+        reply.textContent = "";
+        setState("thinking", "Estoy pensando...");
+
+        try {
+          stopListening();
+          stopMicrophoneVisualizer();
+          const response = await fetch("/api/chat/stream", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ message }),
+            signal: activeRequestController.signal
+          });
+          if (!response.ok) {
+            const errorResult = await response.json();
+            throw new Error(errorResult.error || "No se pudo completar la solicitud.");
+          }
+
+          let result;
+          await readStream(response, (event) => {
+            if (event.type === "status") {
+              setState("thinking", event.message);
+            } else if (event.type === "delta") {
+              reply.textContent += event.text;
+            } else if (event.type === "reset") {
+              reply.textContent = "";
+            } else if (event.type === "error") {
+              throw new Error(event.message);
+            } else if (event.type === "complete") {
+              result = event;
+              reply.textContent = event.reply;
+            }
+          });
+          if (!result) throw new Error("El flujo terminó sin una respuesta final.");
+
+          if (result.musicPlaying === "true") {
+            setState("listening", "Música en reproducción");
+            return;
+          }
+          if (result.audioWarning) throw new Error("Kokoro: " + result.audioWarning);
+          if (!result.audioId) throw new Error("Jarvis no recibió el audio generado.");
+          pendingAudioUrl = "/api/audio/" + encodeURIComponent(result.audioId);
+          try {
+            await playPendingAudio(activeRequestController.signal);
+          } catch (error) {
+            if (error instanceof DOMException && error.name === "AbortError") throw error;
+            if (error instanceof DOMException && error.name === "NotAllowedError") {
+              paused = true;
+              stopListening();
+              setState("error", "Pulsa la esfera para escuchar la respuesta");
+              return;
+            }
+            throw error;
+          }
+        } catch (error) {
+          if (pendingAudioUrl) {
+            if (pendingAudioUrl.startsWith("blob:")) URL.revokeObjectURL(pendingAudioUrl);
+            pendingAudioUrl = "";
+          }
+          if (
+            activeRequestController.signal.aborted ||
+            (error instanceof DOMException && error.name === "AbortError")
+          ) {
+            reply.textContent = "Respuesta cancelada.";
+            setState("listening", "Solicitud cancelada");
+          } else {
+            setState("error", error instanceof Error ? error.message : "Error de conexión");
+          }
+        } finally {
+          busy = false;
+          activeRequestController = undefined;
+          cancelTurn.hidden = true;
+          if (!paused) restartTimer = window.setTimeout(startListening, 500);
+        }
+      }
+
+      cancelTurn.addEventListener("click", () => activeRequestController?.abort());
+
+      if (!SpeechRecognition) {
+        setState("error", "Abre esta página en Chrome o Edge para usar el micrófono");
+        orb.disabled = true;
+      } else {
+        recognition = new SpeechRecognition();
+        recognition.lang = "es-MX";
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        recognition.onstart = () => setState("listening", "Te estoy escuchando");
+        recognition.onresult = (event) => {
+          let finalText = "";
+          let interim = "";
+          for (let index = event.resultIndex; index < event.results.length; index += 1) {
+            const part = event.results[index][0].transcript;
+            if (event.results[index].isFinal) finalText += part;
+            else interim += part;
+          }
+          if (interim.trim() && !busy) heard.textContent = interim.trim() + "…";
+          if (finalText.trim()) void sendUtterance(finalText);
+        };
+        recognition.onerror = (event) => {
+          if (event.error === "not-allowed" || event.error === "service-not-allowed") {
+            paused = true;
+            stopMicrophoneVisualizer();
+            setState("error", "Permite el acceso al micrófono y pulsa la esfera");
+          } else if (event.error !== "no-speech" && event.error !== "aborted") {
+            setState("error", "No se pudo reconocer la voz");
+          }
+        };
+        recognition.onend = () => {
+          if (!paused && !busy) restartTimer = window.setTimeout(startListening, 400);
+        };
+        orb.addEventListener("click", () => {
+          if (busy) return;
+          if (pendingAudioUrl) {
+            paused = true;
+            stopListening();
+            setState("thinking", "Estoy hablando...");
+            void playPendingAudio()
+              .then(() => {
+                paused = false;
+                startListening();
+              })
+              .catch((error) => {
+                setState("error", error instanceof Error ? error.message : "No se pudo reproducir el audio");
+              });
+            return;
+          }
+          if (paused) {
+            paused = false;
+            void startListening();
+          } else {
+            paused = true;
+            stopListening();
+            stopMicrophoneVisualizer();
+            setState("paused", "Micrófono pausado");
+          }
+        });
+        startListening();
+      }
+    </script>
+  </body>
+</html>

@@ -1,0 +1,1 @@
+{"version":3,"file":"logRunable.js","sourceRoot":"","sources":["../../../../src/apps/LogPipelineChallenge/runnables/logRunable.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,cAAc,EAAE,MAAM,2BAA2B,CAAC;AAE3D,MAAM,CAAC,MAAM,WAAW,GAAG,cAAc,CAAC,IAAI,CAC1C,CAAC,MAAa,EAAE,EAAE,CAAC,CAAC;IAChB,WAAW,EAAC,MAAM,CAAC,OAAO,EAAE;IAC5B,cAAc,EAAC,MAAM,CAAC,MAAM;CAC/B,CAAC,CACL,CAAA"}
